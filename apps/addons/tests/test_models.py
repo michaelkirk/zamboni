@@ -21,10 +21,8 @@ from amo.helpers import absolutify
 from amo.signals import _connect, _disconnect
 from addons.models import (Addon, AddonCategory, AddonDependency,
                            AddonRecommendation, AddonType, BlacklistedGuid,
-                           Category, Charity, Feature, FrozenAddon, Persona,
-                           Preview)
+                           Category, Charity, FrozenAddon, Persona, Preview)
 from applications.models import Application, AppVersion
-from bandwagon.models import CollectionAddon, FeaturedCollection
 from devhub.models import ActivityLog
 from files.models import File, Platform
 from files.tests.test_models import UploadTest
@@ -152,10 +150,6 @@ class TestAddonModels(test_utils.TestCase):
 
     def setUp(self):
         TranslationSequence.objects.create(id=99243)
-        # Addon._feature keeps an in-process cache we need to clear.
-        if hasattr(Addon, '_feature'):
-            del Addon._feature
-
         # TODO(andym): use Mock appropriately here.
         self.old_version = amo.FIREFOX.latest_version
         amo.FIREFOX.latest_version = '3.6.15'
@@ -372,49 +366,6 @@ class TestAddonModels(test_utils.TestCase):
         a = Addon.objects.get(pk=1003)
         assert a.is_featured(amo.FIREFOX, 'en-US'), (
             'globally featured add-on not recognized')
-
-    @patch.object(settings, 'NEW_FEATURES', False)
-    def test_is_category_featured(self):
-        """Test if an add-on is category featured."""
-        Feature.objects.filter(addon=1001).delete()
-        a = Addon.objects.get(pk=1001)
-        assert not a.is_featured(amo.FIREFOX, 'en-US'), (
-            "Expected add-on should not be in 'en-US' locale")
-
-        assert a.is_category_featured(amo.FIREFOX), (
-            'Expected add-on to be category-featured for the default locale')
-        assert not a.is_category_featured(amo.FIREFOX, 'fr'), (
-            "Expected add-on to not be in 'fr' locale")
-
-        AddonCategory.objects.filter(addon=a).delete()
-        cache.clear()
-        a = Addon.objects.get(pk=1001)
-        assert not a.is_category_featured(amo.FIREFOX), (
-            'Expected add-on to not be category-featured')
-
-    @patch.object(settings, 'NEW_FEATURES', True)
-    def test_new_is_category_featured(self):
-        """Test if an add-on is category featured."""
-        a = Addon.objects.get(pk=1001)
-        assert a.is_category_featured(amo.FIREFOX), (
-            'Expected add-on to have no locale')
-        assert not a.is_category_featured(amo.FIREFOX, 'fr'), (
-            "Expected add-on to not be in 'fr' locale")
-
-        fc = FeaturedCollection.objects.filter(collection__addons=1001)[0]
-        c = CollectionAddon.objects.filter(addon=a,
-                                           collection=fc.collection)[0]
-        c.delete()
-        assert not a.is_featured(amo.FIREFOX, 'en-US'), (
-            "Expected add-on to be in 'en-US' locale")
-        assert a.is_category_featured(amo.FIREFOX), (
-            'Expected add-on to be category-featured for the default locale')
-
-        AddonCategory.objects.filter(addon=a).delete()
-        cache.clear()
-        a = Addon.objects.get(pk=1001)
-        assert not a.is_category_featured(amo.FIREFOX), (
-            'Expected add-on to not be category-featured')
 
     def test_has_full_profile(self):
         """Test if an add-on's developer profile is complete (public)."""

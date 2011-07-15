@@ -60,6 +60,9 @@ class RedisTest(object):
     def _pre_setup(self):
         super(RedisTest, self)._pre_setup()
         self._redis = mock_redis()
+        from addons.utils import FeaturedManager, CreaturedManager
+        FeaturedManager.build()
+        CreaturedManager.build()
 
     def _post_teardown(self):
         super(RedisTest, self)._post_teardown()

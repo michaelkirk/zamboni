@@ -579,10 +579,12 @@ class FeaturedCollectionManager(amo.models.ManagerBase):
             qs = qs.filter(collection__addons__category__isnull=False)
         if lang:
             qs = qs.filter(Q(locale=lang) | Q(locale__isnull=True))
-        return list(qs.values_list('collection__addons',
-                                   'collection__addons__category',
-                                   'collection__addons__category__application',
-                                   'locale').distinct())
+        vals = qs.distinct().values_list('collection__addons__category',
+                                         'collection__addons',
+                                         'locale')
+        # These fields match what are returned by AddonCategory.values().
+        fields = ['category', 'addon', 'feature_locales']
+        return [dict(zip(fields, row)) for row in vals]
 
 
 class FeaturedCollection(amo.models.ModelBase):

@@ -30,6 +30,7 @@ from amo.helpers import absolutify
 from amo.models import manual_order
 from amo import urlresolvers
 from amo.urlresolvers import reverse
+from addons.utils import FeaturedManager
 from bandwagon.models import Collection, CollectionFeature, CollectionPromo
 import paypal
 from reviews.forms import ReviewForm
@@ -326,8 +327,7 @@ class BaseFilter(object):
 
     def filter_featured(self):
         ids = Addon.featured_random(self.request.APP, self.request.LANG)
-        qs = Addon.objects
-        return qs.filter(id__in=ids) if ids else qs.none()
+        return manual_order(Addon.objects, ids, 'addons.id')
 
     def filter_popular(self):
         return (Addon.objects.order_by('-weekly_downloads')
@@ -377,16 +377,6 @@ class HomepageFilter(BaseFilter):
 
     filter_new = BaseFilter.filter_created
 
-    def __init__(self, *args, **kw):
-        self.featured_ids = Addon.featured_random(args[0].APP, args[0].LANG)
-        super(HomepageFilter, self).__init__(*args, **kw)
-
-    def filter_featured(self):
-        return Addon.objects.filter(pk__in=self.featured_ids)
-
-    def order_featured(self, filter):
-        return manual_order(filter, self.featured_ids, 'addon_id')
-
 
 def home(request):
     # Add-ons.
@@ -415,17 +405,20 @@ def home(request):
 def impala_home(request):
     # Add-ons.
     base = Addon.objects.listed(request.APP).filter(type=amo.ADDON_EXTENSION)
-    featured_ids = Addon.featured_random(request.APP, request.LANG)
+    featured_ext = FeaturedManager.featured_ids(request.APP, request.LANG,
+                                                type=amo.ADDON_EXTENSION)
+    featured_personas = FeaturedManager.featured_ids(request.APP, request.LANG,
+                                                     type=amo.ADDON_PERSONA)
 
     # Collections.
     collections = Collection.objects.filter(listed=True,
                                             application=request.APP.id,
                                             type=amo.COLLECTION_FEATURED)
-    featured = base.filter(id__in=featured_ids)[:18]
+    featured = base.filter(id__in=featured_ext[:18])
     popular = base.order_by('-average_daily_users')[:10]
     hotness = base.order_by('-hotness')[:18]
     personas = (Addon.objects.listed(request.APP)
-                .filter(type=amo.ADDON_PERSONA, id__in=featured_ids))[:18]
+                .filter(type=amo.ADDON_PERSONA, id__in=featured_personas[:18]))
 
     return jingo.render(request, 'addons/impala/home.html',
                         {'popular': popular, 'featured': featured,
@@ -538,8 +531,6 @@ def developers(request, addon, page):
     else:
         version = addon.current_version
 
-
-
     if 'src' in request.GET:
         contribution_src = src = request.GET['src']
     else:
@@ -590,12 +581,12 @@ def old_contribute(request, addon):
                             urllib.urlencode({'uuid': contribution_uuid}))
     # L10n: {0} is an add-on name.
     if addon.charity:
-        name, paypal = addon.charity.name, addon.charity.paypal
+        name, paypal_id = addon.charity.name, addon.charity.paypal
     else:
-        name, paypal = addon.name, addon.paypal_id
+        name, paypal_id = addon.name, addon.paypal_id
     contrib_for = _(u'Contribution for {0}').format(jinja2.escape(name))
     redirect_url_params = contribute_url_params(
-                            paypal,
+                            paypal_id,
                             addon.id,
                             contrib_for,
                             absolutify(return_url),

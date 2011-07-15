@@ -34,6 +34,7 @@ class TestFeaturedManager(test_utils.TestCase):
         eq_(self.fm.redis().smembers(self.fm.by_id), set([1, 2, 3, 4, 5, 6]))
 
     def test_by_app(self):
+        eq_(set(self.fm.featured_ids(amo.FIREFOX)), set([1, 2, 3]))
         eq_(set(self.fm.featured_ids(amo.FIREFOX, 'xx')), set([1, 2, 3]))
 
     def test_by_type(self):

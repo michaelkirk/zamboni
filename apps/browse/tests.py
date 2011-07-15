@@ -22,7 +22,7 @@ from amo.helpers import urlparams
 from addons.tests.test_views import TestMobile
 from addons.models import (Addon, AddonCategory, Category, AppSupport, Feature,
                            Persona)
-from applications.models import Application, AppVersion
+from applications.models import Application
 from bandwagon.models import Collection, CollectionAddon, FeaturedCollection
 from browse import views, feeds
 from browse.views import locale_display_name
@@ -234,11 +234,9 @@ class TestCategoryPages(test_utils.TestCase):
                 'base/featured', 'addons/featured', 'browse/nameless-addon']
 
     def setUp(self):
-        self._new_features = settings.NEW_FEATURES
-        settings.NEW_FEATURES = False
-
-    def tearDown(self):
-        settings.NEW_FEATURES = self._new_features
+        patcher = mock.patch.object(settings, 'NEW_FEATURES', False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_browsing_urls(self):
         """Every browse page URL exists."""
@@ -329,11 +327,9 @@ class NewTestCategoryPages(TestCategoryPages):
                 ['base/addon_3615_featuredcollection'])
 
     def setUp(self):
-        self._new_features = settings.NEW_FEATURES
-        settings.NEW_FEATURES = True
-
-    def tearDown(self):
-        settings.NEW_FEATURES = self._new_features
+        patcher = mock.patch.object(settings, 'NEW_FEATURES', True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
 
 class TestFeaturedLocale(test_utils.TestCase):
@@ -341,8 +337,9 @@ class TestFeaturedLocale(test_utils.TestCase):
                 'base/featured', 'addons/featured', 'browse/nameless-addon']
 
     def setUp(self):
-        self._new_features = settings.NEW_FEATURES
-        settings.NEW_FEATURES = False
+        patcher = mock.patch.object(settings, 'NEW_FEATURES', False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
         self.addon = Addon.objects.get(pk=3615)
         self.persona = Addon.objects.get(pk=15679)
@@ -350,27 +347,18 @@ class TestFeaturedLocale(test_utils.TestCase):
         self.category = Category.objects.get(slug='bookmarks')
 
         self.url = reverse('browse.creatured', args=['bookmarks'])
-        if hasattr(Addon, "_feature"):
-            del Addon._feature
         cache.clear()
-
-    def tearDown(self):
-        settings.NEW_FEATURES = self._new_features
 
     def change_addoncategory(self, addon, locale='es-ES'):
         ac = addon.addoncategory_set.all()[0]
         ac.feature_locales = locale
         ac.save()
-        if hasattr(Addon, "_feature"):
-            del Addon._feature
         cache.clear()
 
     def change_addon(self, addon, locale='es-ES'):
         feature = addon.feature_set.all()[0]
         feature.locale = locale
         feature.save()
-        if hasattr(Addon, "_feature"):
-            del Addon._feature
         cache.clear()
 
     def list_featured(self, content):
@@ -587,11 +575,9 @@ class TestNewFeaturedLocale(TestFeaturedLocale):
     # TODO(cvan): Merge with above once new featured add-ons are enabled.
     def setUp(self):
         super(TestNewFeaturedLocale, self).setUp()
-        self._new_features = settings.NEW_FEATURES
-        settings.NEW_FEATURES = True
-
-    def tearDown(self):
-        settings.NEW_FEATURES = self._new_features
+        patcher = mock.patch.object(settings, 'NEW_FEATURES', True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_featured_random_caching(self):
         raise SkipTest()  # We're no longer caching `featured_random`.
@@ -991,15 +977,11 @@ class TestLegacyRedirects(test_utils.TestCase):
 class TestFeaturedPage(test_utils.TestCase):
     fixtures = ['base/apps', 'base/featured', 'addons/featured']
 
-    def setUp(self):
-        if hasattr(Addon, '_feature'):
-            del Addon._feature
-
     @mock.patch.object(settings, 'NEW_FEATURES', False)
     def test_featured_addons(self):
         """Make sure that only featured add-ons are shown."""
         # Persona returned by featured.
-        assert 15679 in Addon.featured(amo.FIREFOX, 'en-US')
+        assert 15679 in Addon.featured_ids(amo.FIREFOX, 'en-US')
         response = self.client.get(reverse('browse.featured'))
         # But not in the content.
         eq_([1001, 1003, 2464, 3481, 7661],
@@ -1041,11 +1023,9 @@ class TestFeaturedFeed(test_utils.TestCase):
                 'base/collections', 'base/featured', 'base/users']
 
     def setUp(self):
-        self._new_features = settings.NEW_FEATURES
-        settings.NEW_FEATURES = False
-
-    def tearDown(self):
-        settings.NEW_FEATURES = self._new_features
+        patcher = mock.patch.object(settings, 'NEW_FEATURES', False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_feed_elements_present(self):
         """specific elements are present and reasonably well formed"""
@@ -1065,11 +1045,9 @@ class TestNewFeaturedFeed(TestFeaturedFeed):
     fixtures = TestFeaturedFeed.fixtures + ['bandwagon/featured_collections']
 
     def setUp(self):
-        self._new_features = settings.NEW_FEATURES
-        settings.NEW_FEATURES = True
-
-    def tearDown(self):
-        settings.NEW_FEATURES = self._new_features
+        patcher = mock.patch.object(settings, 'NEW_FEATURES', True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
 
 class TestPersonas(test_utils.TestCase):
