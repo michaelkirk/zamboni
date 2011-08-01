@@ -7,6 +7,8 @@ import json
 import random
 import urllib
 
+from django.conf import settings
+from django.core.cache import cache
 from django.http import HttpResponse, HttpResponsePermanentRedirect
 from django.template.context import get_standard_processors
 from django.utils import translation, encoding
@@ -23,7 +25,7 @@ from amo.urlresolvers import get_url_prefix
 from amo.utils import JSONEncoder
 from addons.models import Addon
 from search.client import (Client as SearchClient, SearchError,
-                           extract_from_query, SEARCHABLE_STATUSES)
+                           SEARCHABLE_STATUSES)
 from search import utils as search_utils
 
 ERROR = 'error'
@@ -58,12 +60,13 @@ def render_xml(request, template, context={}, **kwargs):
         context.update(processor(request))
 
     template = xml_env.get_template(template)
-    rendered = template.render(**context)
+    return template.render(**context)
 
+
+def render_xml_response(request, template, context={}, **kwargs):
     if 'mimetype' not in kwargs:
         kwargs['mimetype'] = 'text/xml'
-
-    return HttpResponse(rendered, **kwargs)
+    return HttpResponse(render_xml(request, template, context), **kwargs)
 
 
 def validate_api_version(version):
@@ -165,7 +168,7 @@ class APIView(object):
         """
 
         if self.format == 'xml':
-            return render_xml(self.request, 'api/message.xml',
+            return render_xml_response(self.request, 'api/message.xml',
                 {'error_level': error_level, 'msg': msg}, *args, **kwargs)
         else:
             return HttpResponse(json.dumps({'msg': _(msg)}), *args, **kwargs)
@@ -175,8 +178,8 @@ class APIView(object):
         context['api'] = api
 
         if self.format == 'xml':
-            return render_xml(self.request, template, context,
-                              mimetype=self.mimetype)
+            return render_xml_response(self.request, template, context,
+                                       mimetype=self.mimetype)
         else:
             return HttpResponse(self.render_json(context),
                                 mimetype=self.mimetype)
@@ -201,12 +204,43 @@ class AddonDetailView(APIView):
 
 
 def guid_search(request, api_version, guids):
+    if settings.FASTER_GUID_SEARCH:
+        return _faster_guid_search(request, api_version, guids)
     guids = [g.strip() for g in guids.split(',')] if guids else []
     results = Addon.objects.filter(guid__in=guids, disabled_by_user=False,
                                    status__in=SEARCHABLE_STATUSES)
-    return render_xml(request, 'api/search.xml',
-                      {'results': results, 'total': len(results),
-                       'api_version': api_version, 'api': api})
+    return render_xml_response(request, 'api/search.xml',
+        {'results': results, 'total': len(results),
+         'api_version': api_version, 'api': api})
+
+
+def _faster_guid_search(request, api_version, guids):
+    def render(addon):
+        return render_xml(request, 'api/includes/addon.xml',
+                          {'addon': addon, 'api_version': api_version,
+                           'api': api})
+
+    guids = [g.strip() for g in guids.split(',')] if guids else []
+    results = cache.get_many(guids)
+    others = set(guids) - set(results.keys())
+    if others:
+        addons = Addon.objects.filter(guid__in=others, disabled_by_user=False,
+                                      status__in=amo.REVIEWED_STATUSES)
+        if addons:
+            new = dict((addon.guid, render(addon)) for addon in addons)
+            cache.set_many(new)
+            results.update(new)
+    content = SEARCH_RESULT_XML.format(total=len(results),
+                                       results=u'\n'.join(results.values()))
+    return HttpResponse(content, content_type='text/xml')
+
+
+# This is like api/search.xml but with pre-rendered {results} and no jinja.
+SEARCH_RESULT_XML = u"""\
+<?xml version="1.0" encoding="utf-8" ?>
+<searchresults total_results="{total}">
+  {results}
+</searchresults>"""
 
 
 class SearchView(APIView):

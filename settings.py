@@ -979,6 +979,8 @@ IMPALA_BROWSE = False
 IMPALA_REVIEWS = False
 IMPALA_MEET = False  # Meet the Developer page.
 
+FASTER_GUID_SEARCH = True
+
 # Set to True if we're allowed to use X-SENDFILE.
 XSENDFILE = True
 

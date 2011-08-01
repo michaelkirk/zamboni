@@ -619,9 +619,19 @@ class TestGuidSearch(TestCase):
     fixtures = ('base/apps', 'base/addon_6113', 'base/addon_3615')
 
     def test_success(self):
-        r = make_call('search/guid:{22870005-adef-4c9d-ae36-d0e1f2f27e5a},'
-                      '{2fa4ed95-0317-4c6a-a74c-5f3e3912c1f9}')
+        guids = ['{22870005-adef-4c9d-ae36-d0e1f2f27e5a}',
+                 '{2fa4ed95-0317-4c6a-a74c-5f3e3912c1f9}']
+        r = make_call('search/guid:' + ','.join(guids))
         eq_(set(['3615', '6113']),
+            set([a.attrib['id'] for a in pq(r.content)('addon')]))
+
+        # Now add a new addon and make sure it's inside the results.
+        new = Addon.objects.create(type=amo.ADDON_EXTENSION, guid='woohoo',
+                                   name=u'\xd8\u1124 UNICODE')
+        new.update(status=amo.STATUS_PUBLIC)
+        guids.append(new.guid)
+        r = make_call('search/guid:' + ','.join(guids))
+        eq_(set(['3615', '6113', str(new.id)]),
             set([a.attrib['id'] for a in pq(r.content)('addon')]))
 
     def test_block_inactive(self):
@@ -639,10 +649,8 @@ class TestGuidSearch(TestCase):
             set([a.attrib['id'] for a in pq(r.content)('addon')]))
 
     def test_empty(self):
-        """
-        Bug: https://bugzilla.mozilla.org/show_bug.cgi?id=607044
-        guid:foo, should search for just 'foo' and not empty guids.
-        """
+        # Bug: https://bugzilla.mozilla.org/show_bug.cgi?id=607044
+        # guid:foo, should search for just 'foo' and not empty guids.
         r = make_call('search/guid:koberger,')
         doc = pq(r.content)
         # No addons should exist with guid koberger and the , should not
